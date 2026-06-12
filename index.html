@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>セキスペ 単語帳</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>セキスペ <span>単語帳</span></h1>
+    <p class="subtitle">情報処理安全確保支援士 試験対策フラッシュカード</p>
+  </header>
+
+  <div class="controls">
+    <div id="filters"></div>
+    <span class="spacer"></span>
+    <span class="counter" id="counter"></span>
+    <button class="btn btn-reset" id="btn-reset">リセット</button>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-stats">
+      <span class="stat"><span class="dot green"></span><span id="stat-correct">正解 0</span></span>
+      <span class="stat"><span class="dot red"></span><span id="stat-wrong">不正解 0</span></span>
+      <span class="stat"><span class="dot grey"></span><span id="stat-unseen">未回答 0</span></span>
+    </div>
+    <div class="progress-bar">
+      <div class="prog-correct" id="prog-correct" style="width:0%"></div>
+      <div class="prog-wrong"   id="prog-wrong"   style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="card-area" id="card-area">
+    <div class="card" id="card">
+      <div class="card-face front">
+        <div class="card-category" id="card-category"></div>
+        <div class="card-text" id="card-front-text"></div>
+        <div class="card-hint">クリック または Space/Enter でめくる</div>
+      </div>
+      <div class="card-face back">
+        <div class="card-category" id="card-back-category"></div>
+        <div class="card-text" id="card-back-text"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions hidden" id="actions">
+    <button class="btn btn-wrong" id="btn-wrong" disabled>✗ 不正解</button>
+    <button class="btn btn-skip"  id="btn-skip">スキップ</button>
+    <button class="btn btn-correct" id="btn-correct" disabled>✓ 正解</button>
+  </div>
+
+  <div class="done-screen hidden" id="done-screen">
+    <h2>デッキ完了！</h2>
+    <div class="done-score" id="done-score"></div>
+    <div class="done-sub" id="done-detail"></div>
+    <button class="btn btn-correct" id="btn-restart" style="margin:0 auto;">もう一度</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
