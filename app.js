@@ -210,12 +210,12 @@ function toggleTTS() {
       updateProgress();
     };
 
-    // 間（無音）→ カードをめくるタイミング
-    const pauseU = makeUtterance('　　　', 0.1); // 全角スペースをゆっくり読んで間を作る
-    pauseU.volume = 0.01;
+    // 0.5秒の無音（用語→意味の切り替え）→ カードをめくるタイミング
+    // 「ん」をほぼ無音で読ませることでTTSエンジンに処理させつつ間を作る
+    const pauseU = makeUtterance('ん', 0.5);
+    pauseU.volume = 0.001;
     pauseU.onstart = () => {
       if (!ttsPlaying) return;
-      // カードをめくる
       flipped = true;
       $('card').classList.add('flipped');
     };
@@ -223,9 +223,9 @@ function toggleTTS() {
     // 裏面（意味）
     const backU = makeUtterance(backText);
 
-    // カード間の間（無音）
-    const gapU = makeUtterance('　　　　　', 0.1);
-    gapU.volume = 0.01;
+    // カード間の間（約1秒）
+    const gapU = makeUtterance('んん', 0.5);
+    gapU.volume = 0.001;
 
     speechSynthesis.speak(frontU);
     speechSynthesis.speak(pauseU);
