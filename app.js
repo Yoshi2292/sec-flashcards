@@ -4,10 +4,7 @@ let currentIndex = 0;
 let flipped = false;
 let results = {}; // id -> 'correct'|'wrong'
 let reverseMode = false;
-
-// TTS state
 let ttsPlaying = false;
-let ttsTimer = null;
 
 const STORAGE_KEY = 'sekisupe_results';
 
@@ -68,7 +65,7 @@ function renderCard() {
     actions.classList.add('hidden');
     doneScreen.classList.remove('hidden');
     renderDone();
-    stopTTS();
+    if (ttsPlaying) stopTTS();
     return;
   }
 
@@ -85,11 +82,8 @@ function renderCard() {
   $('card-back-category').textContent = card.category;
   $('card-back-text').textContent = backText;
 
-  // reset flip
   flipped = false;
   $('card').classList.remove('flipped');
-
-  // lock answer buttons until flipped
   $('btn-correct').disabled = true;
   $('btn-wrong').disabled = true;
 
@@ -113,7 +107,7 @@ function flipCard() {
 }
 
 function answer(result) {
-  if (ttsPlaying) return; // TTS再生中は手動操作を無効化
+  if (ttsPlaying) return;
   const card = deck[currentIndex];
   results[card.id] = result;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
@@ -160,79 +154,93 @@ function resetDeck() {
   applyFilter(activeFilter);
 }
 
-// ── TTS ──────────────────────────────────────────────
+// ── TTS ──────────────────────────────────────────────────────────────────────
+// iOS Safari の制約: speak() はユーザー操作のイベントハンドラ内で
+// 同期的に呼ばなければ無視される。
+// 対策: ボタン押下時に全カード分の utterance を一括で queue に積む。
+// onstart で UI を更新することで「カードをめくる」タイミングを制御する。
 
-function speak(text, onDone) {
-  const utter = new SpeechSynthesisUtterance(text);
-  utter.lang = 'ja-JP';
-  utter.rate = 0.85;
-  utter.pitch = 1.0;
-
-  // iOSではonendが発火しないことがあるためタイムアウトで保険をかける
-  const fallbackMs = Math.max(3000, text.length * 180);
-  let settled = false;
-  const done = () => {
-    if (settled) return;
-    settled = true;
-    clearTimeout(ttsTimer);
-    if (onDone) onDone();
-  };
-
-  utter.onend = done;
-  utter.onerror = done;
-  ttsTimer = setTimeout(done, fallbackMs);
-  speechSynthesis.speak(utter);
+function makeUtterance(text, rate) {
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  u.rate = rate || 0.88;
+  return u;
 }
 
-function ttsPlayCard() {
-  if (!ttsPlaying) return;
-  if (currentIndex >= deck.length) { stopTTS(); return; }
+function toggleTTS() {
+  if (ttsPlaying) { stopTTS(); return; }
 
-  renderCard();
-
-  const card = deck[currentIndex];
-  const frontText = reverseMode ? card.back : card.front;
-  const backText  = reverseMode ? card.front : card.back;
-
-  // 用語を読む
-  speak(frontText, () => {
-    if (!ttsPlaying) return;
-    // 少し間を置いてからカードをめくり意味を読む
-    ttsTimer = setTimeout(() => {
-      if (!ttsPlaying) return;
-      flipCard();
-      speak(backText, () => {
-        if (!ttsPlaying) return;
-        // 次のカードまでの間隔
-        ttsTimer = setTimeout(() => {
-          if (!ttsPlaying) return;
-          currentIndex++;
-          updateProgress();
-          ttsPlayCard();
-        }, 1800);
-      });
-    }, 700);
-  });
-}
-
-function startTTS() {
   if (!window.speechSynthesis) {
     alert('お使いのブラウザは音声読み上げに対応していません。');
     return;
   }
-  // 再生済みの発話をクリア
+
+  // 残っている発話をクリア（同期的に実行）
   speechSynthesis.cancel();
+
+  if (currentIndex >= deck.length) currentIndex = 0;
+
   ttsPlaying = true;
   $('btn-tts').textContent = '■ 停止';
   $('btn-tts').classList.add('active');
-  // 最初のカードから再生
-  if (currentIndex >= deck.length) currentIndex = 0;
-  ttsPlayCard();
+
+  // ── 全カードの utterance を一括 queue（iOS 対応の核心部分）──
+  for (let i = currentIndex; i < deck.length; i++) {
+    const card = deck[i];
+    const idx = i;
+    const frontText = reverseMode ? card.back : card.front;
+    const backText  = reverseMode ? card.front : card.back;
+
+    // 表面（用語）
+    const frontU = makeUtterance(frontText);
+    frontU.onstart = () => {
+      if (!ttsPlaying) return;
+      currentIndex = idx;
+      // カードを表面にリセット
+      flipped = false;
+      $('card').classList.remove('flipped');
+      $('btn-correct').disabled = true;
+      $('btn-wrong').disabled = true;
+      // テキスト更新
+      $('card-category').textContent = card.category;
+      $('card-front-text').textContent = frontText;
+      $('card-back-category').textContent = card.category;
+      $('card-back-text').textContent = backText;
+      $('counter').textContent = `${idx + 1} / ${deck.length}`;
+      updateProgress();
+    };
+
+    // 間（無音）→ カードをめくるタイミング
+    const pauseU = makeUtterance('　　　', 0.1); // 全角スペースをゆっくり読んで間を作る
+    pauseU.volume = 0.01;
+    pauseU.onstart = () => {
+      if (!ttsPlaying) return;
+      // カードをめくる
+      flipped = true;
+      $('card').classList.add('flipped');
+    };
+
+    // 裏面（意味）
+    const backU = makeUtterance(backText);
+
+    // カード間の間（無音）
+    const gapU = makeUtterance('　　　　　', 0.1);
+    gapU.volume = 0.01;
+
+    speechSynthesis.speak(frontU);
+    speechSynthesis.speak(pauseU);
+    speechSynthesis.speak(backU);
+    speechSynthesis.speak(gapU);
+  }
+
+  // 全カード終了マーカー
+  const endU = makeUtterance('以上です。');
+  endU.onend = () => stopTTS();
+  speechSynthesis.speak(endU);
 }
 
 function stopTTS() {
   ttsPlaying = false;
-  clearTimeout(ttsTimer);
   speechSynthesis.cancel();
   const btn = $('btn-tts');
   if (btn) {
@@ -241,12 +249,7 @@ function stopTTS() {
   }
 }
 
-function toggleTTS() {
-  if (ttsPlaying) stopTTS();
-  else startTTS();
-}
-
-// ── Event Listeners ──────────────────────────────────
+// ── Event Listeners ───────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
   $('card').addEventListener('click', flipCard);
