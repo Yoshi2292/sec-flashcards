@@ -191,6 +191,11 @@ function makeUtterance(text, rate) {
   return u;
 }
 
+// 出典注釈「（R5春SC午後Ⅰ問3）」などを音声読み上げ前に除去する
+function stripCitation(text) {
+  return text.replace(/（R\d+[^）]*）/g, '').trim();
+}
+
 function queueTTS() {
   // iOS 対応：全カードの utterance を同期的に一括キューに積む
   for (let i = currentIndex; i < deck.length; i++) {
@@ -225,8 +230,8 @@ function queueTTS() {
       $('card').classList.add('flipped');
     };
 
-    // 裏面（意味）
-    const backU = makeUtterance(backText);
+    // 裏面（意味）※出典注釈は読み上げない
+    const backU = makeUtterance(stripCitation(backText));
 
     // カード間の間（約1.5秒）
     const gapU = makeUtterance('んんんんん', 0.5);
