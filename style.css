@@ -215,6 +215,10 @@ h1 span {
 .btn-reset { background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 10px 16px; }
 .btn-reset:hover { color: var(--text); border-color: var(--text2); }
 
+.btn-mode { background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 10px 16px; }
+.btn-mode:hover { color: var(--text); border-color: var(--text2); }
+.btn-mode.active { background: var(--accent2); border-color: var(--accent2); color: #fff; }
+
 /* done screen */
 .done-screen {
   width: 100%;

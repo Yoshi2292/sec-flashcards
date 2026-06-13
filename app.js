@@ -3,6 +3,7 @@ let deck = [];
 let currentIndex = 0;
 let flipped = false;
 let results = {}; // id -> 'correct'|'wrong'
+let reverseMode = false;
 
 const STORAGE_KEY = 'sekisupe_results';
 
@@ -70,10 +71,13 @@ function renderCard() {
   doneScreen.classList.add('hidden');
 
   const card = deck[currentIndex];
+  const frontText = reverseMode ? card.back : card.front;
+  const backText  = reverseMode ? card.front : card.back;
+
   $('card-category').textContent = card.category;
-  $('card-front-text').textContent = card.front;
+  $('card-front-text').textContent = frontText;
   $('card-back-category').textContent = card.category;
-  $('card-back-text').textContent = card.back;
+  $('card-back-text').textContent = backText;
 
   // reset flip
   flipped = false;
@@ -84,6 +88,14 @@ function renderCard() {
   $('btn-wrong').disabled = true;
 
   $('counter').textContent = `${currentIndex + 1} / ${deck.length}`;
+}
+
+function toggleMode() {
+  reverseMode = !reverseMode;
+  $('btn-mode').textContent = reverseMode ? '用語→意味' : '意味→用語';
+  $('btn-mode').classList.toggle('active', reverseMode);
+  const activeFilter = document.querySelector('.filter-btn.active')?.dataset.cat || 'すべて';
+  applyFilter(activeFilter);
 }
 
 function flipCard() {
@@ -147,12 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-skip').addEventListener('click', skip);
   $('btn-reset').addEventListener('click', resetDeck);
   $('btn-restart').addEventListener('click', resetDeck);
+  $('btn-mode').addEventListener('click', toggleMode);
 
   document.addEventListener('keydown', e => {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); }
     if (e.key === 'ArrowRight' || e.key === 'l') { if (flipped) answer('correct'); }
     if (e.key === 'ArrowLeft'  || e.key === 'h') { if (flipped) answer('wrong'); }
     if (e.key === 's') skip();
+    if (e.key === 'r') toggleMode();
   });
 
   init();
