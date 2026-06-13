@@ -212,6 +212,9 @@ h1 span {
 .btn-skip { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
 .btn-skip:hover:not(:disabled) { color: var(--text); border-color: var(--text2); }
 
+.btn-prev, .btn-next { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+.btn-prev:hover, .btn-next:hover { color: var(--text); border-color: var(--text2); }
+
 .btn-reset { background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 10px 16px; }
 .btn-reset:hover { color: var(--text); border-color: var(--text2); }
 
