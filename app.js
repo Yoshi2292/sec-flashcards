@@ -5,6 +5,10 @@ let flipped = false;
 let results = {}; // id -> 'correct'|'wrong'
 let reverseMode = false;
 
+// TTS state
+let ttsPlaying = false;
+let ttsTimer = null;
+
 const STORAGE_KEY = 'sekisupe_results';
 
 const $ = id => document.getElementById(id);
@@ -39,6 +43,7 @@ function buildCategoryFilters() {
 }
 
 function applyFilter(cat) {
+  if (ttsPlaying) stopTTS();
   deck = cat === 'すべて' ? [...allCards] : allCards.filter(c => c.category === cat);
   shuffle(deck);
   currentIndex = 0;
@@ -63,6 +68,7 @@ function renderCard() {
     actions.classList.add('hidden');
     doneScreen.classList.remove('hidden');
     renderDone();
+    stopTTS();
     return;
   }
 
@@ -107,6 +113,7 @@ function flipCard() {
 }
 
 function answer(result) {
+  if (ttsPlaying) return; // TTS再生中は手動操作を無効化
   const card = deck[currentIndex];
   results[card.id] = result;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
@@ -116,6 +123,7 @@ function answer(result) {
 }
 
 function skip() {
+  if (ttsPlaying) return;
   currentIndex++;
   renderCard();
   updateProgress();
@@ -145,13 +153,101 @@ function renderDone() {
 }
 
 function resetDeck() {
+  if (ttsPlaying) stopTTS();
   const activeFilter = document.querySelector('.filter-btn.active')?.dataset.cat || 'すべて';
   deck.forEach(c => delete results[c.id]);
   localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
   applyFilter(activeFilter);
 }
 
-// event listeners
+// ── TTS ──────────────────────────────────────────────
+
+function speak(text, onDone) {
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'ja-JP';
+  utter.rate = 0.85;
+  utter.pitch = 1.0;
+
+  // iOSではonendが発火しないことがあるためタイムアウトで保険をかける
+  const fallbackMs = Math.max(3000, text.length * 180);
+  let settled = false;
+  const done = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(ttsTimer);
+    if (onDone) onDone();
+  };
+
+  utter.onend = done;
+  utter.onerror = done;
+  ttsTimer = setTimeout(done, fallbackMs);
+  speechSynthesis.speak(utter);
+}
+
+function ttsPlayCard() {
+  if (!ttsPlaying) return;
+  if (currentIndex >= deck.length) { stopTTS(); return; }
+
+  renderCard();
+
+  const card = deck[currentIndex];
+  const frontText = reverseMode ? card.back : card.front;
+  const backText  = reverseMode ? card.front : card.back;
+
+  // 用語を読む
+  speak(frontText, () => {
+    if (!ttsPlaying) return;
+    // 少し間を置いてからカードをめくり意味を読む
+    ttsTimer = setTimeout(() => {
+      if (!ttsPlaying) return;
+      flipCard();
+      speak(backText, () => {
+        if (!ttsPlaying) return;
+        // 次のカードまでの間隔
+        ttsTimer = setTimeout(() => {
+          if (!ttsPlaying) return;
+          currentIndex++;
+          updateProgress();
+          ttsPlayCard();
+        }, 1800);
+      });
+    }, 700);
+  });
+}
+
+function startTTS() {
+  if (!window.speechSynthesis) {
+    alert('お使いのブラウザは音声読み上げに対応していません。');
+    return;
+  }
+  // 再生済みの発話をクリア
+  speechSynthesis.cancel();
+  ttsPlaying = true;
+  $('btn-tts').textContent = '■ 停止';
+  $('btn-tts').classList.add('active');
+  // 最初のカードから再生
+  if (currentIndex >= deck.length) currentIndex = 0;
+  ttsPlayCard();
+}
+
+function stopTTS() {
+  ttsPlaying = false;
+  clearTimeout(ttsTimer);
+  speechSynthesis.cancel();
+  const btn = $('btn-tts');
+  if (btn) {
+    btn.textContent = '▶ 音声';
+    btn.classList.remove('active');
+  }
+}
+
+function toggleTTS() {
+  if (ttsPlaying) stopTTS();
+  else startTTS();
+}
+
+// ── Event Listeners ──────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', () => {
   $('card').addEventListener('click', flipCard);
   $('btn-correct').addEventListener('click', () => answer('correct'));
@@ -160,13 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-reset').addEventListener('click', resetDeck);
   $('btn-restart').addEventListener('click', resetDeck);
   $('btn-mode').addEventListener('click', toggleMode);
+  $('btn-tts').addEventListener('click', toggleTTS);
 
   document.addEventListener('keydown', e => {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); }
-    if (e.key === 'ArrowRight' || e.key === 'l') { if (flipped) answer('correct'); }
-    if (e.key === 'ArrowLeft'  || e.key === 'h') { if (flipped) answer('wrong'); }
-    if (e.key === 's') skip();
+    if (e.key === 'ArrowRight' || e.key === 'l') { if (flipped && !ttsPlaying) answer('correct'); }
+    if (e.key === 'ArrowLeft'  || e.key === 'h') { if (flipped && !ttsPlaying) answer('wrong'); }
+    if (e.key === 's' && !ttsPlaying) skip();
     if (e.key === 'r') toggleMode();
+    if (e.key === 'p') toggleTTS();
   });
 
   init();
