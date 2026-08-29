@@ -196,8 +196,30 @@ function stripCitation(text) {
   return text.replace(/（R\d+[^）]*）/g, '').trim();
 }
 
+function showCardFront(card, frontText, backText, idx) {
+  currentIndex = idx;
+  flipped = false;
+  $('card').classList.remove('flipped');
+  $('btn-correct').disabled = true;
+  $('btn-wrong').disabled = true;
+  $('card-category').textContent = card.category;
+  $('card-front-text').textContent = frontText;
+  $('card-back-category').textContent = card.category;
+  $('card-back-text').textContent = backText;
+  $('counter').textContent = `${idx + 1} / ${deck.length}`;
+  updateProgress();
+}
+
 function queueTTS() {
   // iOS 対応：全カードの utterance を同期的に一括キューに積む
+  // 最初のカードを即時表示（onstart 頼みにしない）
+  if (currentIndex < deck.length) {
+    const first = deck[currentIndex];
+    const ff = reverseMode ? first.back : first.front;
+    const fb = reverseMode ? first.front : first.back;
+    showCardFront(first, ff, fb, currentIndex);
+  }
+
   for (let i = currentIndex; i < deck.length; i++) {
     const card = deck[i];
     const idx = i;
@@ -206,26 +228,24 @@ function queueTTS() {
 
     // 表面（用語）
     const frontU = makeUtterance(frontText);
+    // onstart はフォールバック（発火すれば早めに表示）
     frontU.onstart = () => {
       if (!ttsPlaying) return;
-      currentIndex = idx;
-      flipped = false;
-      $('card').classList.remove('flipped');
-      $('btn-correct').disabled = true;
-      $('btn-wrong').disabled = true;
-      $('card-category').textContent = card.category;
-      $('card-front-text').textContent = frontText;
-      $('card-back-category').textContent = card.category;
-      $('card-back-text').textContent = backText;
-      $('counter').textContent = `${idx + 1} / ${deck.length}`;
-      updateProgress();
+      showCardFront(card, frontText, backText, idx);
+    };
+    // onend でカードをめくる（iOS で信頼性が高い）
+    frontU.onend = () => {
+      if (!ttsPlaying) return;
+      flipped = true;
+      $('card').classList.add('flipped');
     };
 
-    // 1秒の無音（用語→意味の切り替え）＋カードをめくる
+    // 無音ポーズ（用語→意味の切り替え）
     const pauseU = makeUtterance('んんん', 0.5);
     pauseU.volume = 0.001;
+    // onstart はフォールバック（frontU.onend が発火しなかった場合の保険）
     pauseU.onstart = () => {
-      if (!ttsPlaying) return;
+      if (!ttsPlaying || flipped) return;
       flipped = true;
       $('card').classList.add('flipped');
     };
@@ -233,9 +253,18 @@ function queueTTS() {
     // 裏面（意味）※出典注釈は読み上げない
     const backU = makeUtterance(stripCitation(backText));
 
-    // カード間の間（約1.5秒）
+    // カード間の間
     const gapU = makeUtterance('んんんんん', 0.5);
     gapU.volume = 0.001;
+    // onend で次のカードを表示（メイン同期機構）
+    const nextIdx = i + 1;
+    gapU.onend = () => {
+      if (!ttsPlaying || nextIdx >= deck.length) return;
+      const nc = deck[nextIdx];
+      const nf = reverseMode ? nc.back : nc.front;
+      const nb = reverseMode ? nc.front : nc.back;
+      showCardFront(nc, nf, nb, nextIdx);
+    };
 
     speechSynthesis.speak(frontU);
     speechSynthesis.speak(pauseU);
