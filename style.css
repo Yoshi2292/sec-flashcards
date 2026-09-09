@@ -119,12 +119,13 @@ h1 span {
   width: 100%;
   max-width: 760px;
   perspective: 1200px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .card {
   width: 100%;
-  min-height: 260px;
+  min-height: 200px;
+  height: auto;
   position: relative;
   transform-style: preserve-3d;
   transition: transform 0.45s cubic-bezier(0.4,0,0.2,1);
@@ -136,7 +137,8 @@ h1 span {
 .card-face {
   position: absolute;
   width: 100%;
-  min-height: 260px;
+  min-height: 200px;
+  max-height: min(420px, 45vh);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   background: var(--surface);
@@ -145,7 +147,9 @@ h1 span {
   padding: 32px 36px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-face.back { transform: rotateY(180deg); }
