@@ -88,6 +88,7 @@ function renderCard() {
   $('btn-wrong').disabled = true;
 
   $('counter').textContent = `${currentIndex + 1} / ${deck.length}`;
+  syncCardHeight();
 }
 
 function toggleMode() {
@@ -98,12 +99,27 @@ function toggleMode() {
   applyFilter(activeFilter);
 }
 
+function syncCardHeight() {
+  // position:absolute の face 2枚を内包するコンテナに高さを明示する
+  // 表示中の面（front or back）の scrollHeight を基準にする
+  const face = flipped
+    ? document.querySelector('.card-face.back')
+    : document.querySelector('.card-face.front');
+  if (!face) return;
+  // max-height を超えた場合はスクロール可能な上限値になる
+  const maxH = Math.min(420, window.innerHeight * 0.45);
+  const h = Math.max(200, Math.min(face.scrollHeight, maxH));
+  $('card').style.height = h + 'px';
+}
+
 function flipCard() {
   if (flipped) return;
   flipped = true;
   $('card').classList.add('flipped');
   $('btn-correct').disabled = false;
   $('btn-wrong').disabled = false;
+  // 裏面の高さに合わせてコンテナをリサイズ
+  requestAnimationFrame(syncCardHeight);
 }
 
 function answer(result) {
@@ -208,6 +224,7 @@ function showCardFront(card, frontText, backText, idx) {
   $('card-back-text').textContent = backText;
   $('counter').textContent = `${idx + 1} / ${deck.length}`;
   updateProgress();
+  requestAnimationFrame(syncCardHeight);
 }
 
 function queueTTS() {
