@@ -113,12 +113,19 @@ function syncCardHeight() {
 }
 
 function flipCard() {
-  if (flipped) return;
+  if (flipped) {
+    // 裏→表に戻す
+    flipped = false;
+    $('card').classList.remove('flipped');
+    $('btn-correct').disabled = true;
+    $('btn-wrong').disabled = true;
+    requestAnimationFrame(syncCardHeight);
+    return;
+  }
   flipped = true;
   $('card').classList.add('flipped');
   $('btn-correct').disabled = false;
   $('btn-wrong').disabled = false;
-  // 裏面の高さに合わせてコンテナをリサイズ
   requestAnimationFrame(syncCardHeight);
 }
 
