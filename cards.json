@@ -892,5 +892,65 @@
     "category": "セキュリティ管理",
     "front": "APIキー削除と証明書失効の違いは？",
     "back": "APIキー削除＝発行済みのAPIキーをシステム側で無効化・削除する対応（即時にそのキーでの認証を拒否）。証明書失効＝CRLやOCSPを通じて証明書を無効と登録し、検証者が失効確認できるようにする対応（証明書自体は残るが信頼を取り消す）。どちらも「認証情報の無効化」だが、仕組み（単純削除 vs 失効リスト・プロトコルによる周知）が異なる。（R5秋問3）"
+  },
+  {
+    "id": 150,
+    "category": "脆弱性・攻撃",
+    "front": "HTMLエスケープ（無害化）",
+    "back": "&, <, >, \", ' をそれぞれ &amp; &lt; &gt; &quot; &#39; に置換し、入力値をHTML構文ではなくデータとして表示させる処理。&を最初に変換しないと二重エスケープになる。"
+  },
+  {
+    "id": 151,
+    "category": "脆弱性・攻撃",
+    "front": "属性値エスケープの二重対策",
+    "back": "属性値への出力は「二重引用符で囲む」＋「\"をエスケープする」の両方が必須。引用符で囲まないと空白区切りで新規属性（onmouseover等）を注入される。"
+  },
+  {
+    "id": 152,
+    "category": "脆弱性・攻撃",
+    "front": "javascript:スキームXSS",
+    "back": "href/srcにjavascript:から始まるURLを指定するとクリック等でスクリプトが実行される攻撃。HTMLエスケープでは防げず、URLスキームをhttp/httpsにホワイトリスト化して対策する。"
+  },
+  {
+    "id": 153,
+    "category": "脆弱性・攻撃",
+    "front": "XSSベクタ（attack vector）",
+    "back": "攻撃コードを注入・実行させる入口や経路のこと。HTML本文、属性値、URL、JavaScript内、CSS内などが代表的なベクタ。"
+  },
+  {
+    "id": 154,
+    "category": "脆弱性・攻撃",
+    "front": "onmouseover / onerror攻撃",
+    "back": "onmouseoverはマウスを乗せるだけ、onerrorは画像読み込み失敗を意図的に起こすだけで発火するイベント属性。クリック等のユーザー操作なしに自動実行させられるためXSSで悪用されやすい。"
+  },
+  {
+    "id": 155,
+    "category": "セキュリティ管理",
+    "front": "CSP: script-src 'self'",
+    "back": "スクリプトの読み込み・実行元を同一オリジンのみに制限するディレクティブ。'unsafe-inline'未指定時はインラインscript、イベント属性、javascript:スキームもすべてデフォルトでブロックされる。"
+  },
+  {
+    "id": 156,
+    "category": "セキュリティ管理",
+    "front": "CSP: frame-srcとframe-ancestorsの違い",
+    "back": "frame-srcは自ページが他サイトをiframe埋め込みする際の制限。frame-ancestorsは自ページが他サイトにiframe埋め込みされる際の制限（X-Frame-Options後継、クリックジャッキング対策）。"
+  },
+  {
+    "id": 157,
+    "category": "セキュリティ管理",
+    "front": "CSPのnonce方式",
+    "back": "リクエストごとに生成するランダム値をレスポンスヘッダとscriptタグ双方に埋め込み、一致するインラインスクリプトのみ実行許可する仕組み。値が固定・推測可能だと無意味化する。"
+  },
+  {
+    "id": 158,
+    "category": "セキュリティ管理",
+    "front": "CSPで防げない攻撃",
+    "back": "CSRF（対策は別途CSRFトークンやSameSite Cookie）、SQLインジェクション（無関係）。DOM based XSSも一部防げないケースがある。"
+  },
+  {
+    "id": 159,
+    "category": "セキュリティ管理",
+    "front": "CSPのmetaタグ配信の限界",
+    "back": "<meta http-equiv=\"Content-Security-Policy\">での配信はframe-ancestors等の一部ディレクティブが無効になるため、HTTPレスポンスヘッダでの配信が原則推奨される。"
   }
 ]
