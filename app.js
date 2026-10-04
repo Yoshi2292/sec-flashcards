@@ -5,6 +5,11 @@ let flipped = false;
 let results = {}; // id -> 'correct'|'wrong'
 let reverseMode = false;
 let ttsPlaying = false;
+let waitingForAnswer = false; // インタラクティブTTSで答え待ち中
+
+// ── 音声コマンド ──
+let voiceMode = false;
+let recognition = null;
 
 const STORAGE_KEY = 'sekisupe_results';
 
@@ -88,6 +93,7 @@ function renderCard() {
   $('btn-wrong').disabled = true;
 
   $('counter').textContent = `${currentIndex + 1} / ${deck.length}`;
+  setHint('クリック または Space/Enter でめくる');
   syncCardHeight();
 }
 
@@ -100,21 +106,30 @@ function toggleMode() {
 }
 
 function syncCardHeight() {
-  // position:absolute の face 2枚を内包するコンテナに高さを明示する
-  // 表示中の面（front or back）の scrollHeight を基準にする
   const face = flipped
     ? document.querySelector('.card-face.back')
     : document.querySelector('.card-face.front');
   if (!face) return;
-  // max-height を超えた場合はスクロール可能な上限値になる
   const maxH = Math.min(420, window.innerHeight * 0.45);
   const h = Math.max(200, Math.min(face.scrollHeight, maxH));
   $('card').style.height = h + 'px';
 }
 
+function setHint(text) {
+  const el = document.querySelector('.card-hint');
+  if (el) el.textContent = text;
+}
+
 function flipCard() {
+  // インタラクティブTTSで答え待ち中：タップで答えを読み上げ
+  if (ttsPlaying && waitingForAnswer) {
+    waitingForAnswer = false;
+    speakBack();
+    return;
+  }
+  if (ttsPlaying) return;
+
   if (flipped) {
-    // 裏→表に戻す
     flipped = false;
     $('card').classList.remove('flipped');
     $('btn-correct').disabled = true;
@@ -148,10 +163,10 @@ function skip() {
 
 function prevCard() {
   if (ttsPlaying) {
-    // TTS再生中：キャンセルして前のカードから再キュー（ユーザー操作から同期呼び出し）
     speechSynthesis.cancel();
+    waitingForAnswer = false;
     currentIndex = Math.max(0, currentIndex - 1);
-    queueTTS();
+    speakFront();
     return;
   }
   if (currentIndex <= 0) return;
@@ -162,10 +177,10 @@ function prevCard() {
 
 function nextCard() {
   if (ttsPlaying) {
-    // TTS再生中：キャンセルして次のカードから再キュー（ユーザー操作から同期呼び出し）
     speechSynthesis.cancel();
+    waitingForAnswer = false;
     currentIndex = Math.min(deck.length - 1, currentIndex + 1);
-    queueTTS();
+    speakFront();
     return;
   }
   skip();
@@ -202,10 +217,7 @@ function resetDeck() {
   applyFilter(activeFilter);
 }
 
-// ── TTS ──────────────────────────────────────────────────────────────────────
-// iOS Safari の制約: speak() はユーザー操作のイベントハンドラ内で
-// 同期的に呼ばなければ無視される。
-// 対策: ボタン押下・次へ・前へのクリック時に残カード分を一括 queue。
+// ── TTS（インタラクティブモード）────────────────────────────────────────────
 
 function makeUtterance(text, rate) {
   const u = new SpeechSynthesisUtterance(text);
@@ -214,7 +226,6 @@ function makeUtterance(text, rate) {
   return u;
 }
 
-// 出典注釈「（R5春SC午後Ⅰ問3）」などを音声読み上げ前に除去する
 function stripCitation(text) {
   return text.replace(/（R\d+[^）]*）/g, '').trim();
 }
@@ -234,72 +245,51 @@ function showCardFront(card, frontText, backText, idx) {
   requestAnimationFrame(syncCardHeight);
 }
 
-function queueTTS() {
-  // iOS 対応：全カードの utterance を同期的に一括キューに積む
-  // 最初のカードを即時表示（onstart 頼みにしない）
-  if (currentIndex < deck.length) {
-    const first = deck[currentIndex];
-    const ff = reverseMode ? first.back : first.front;
-    const fb = reverseMode ? first.front : first.back;
-    showCardFront(first, ff, fb, currentIndex);
-  }
+// 問題面を読み上げ → 終了後に一時停止して答え待ち
+function speakFront() {
+  if (currentIndex >= deck.length) { stopTTS(); return; }
 
-  for (let i = currentIndex; i < deck.length; i++) {
-    const card = deck[i];
-    const idx = i;
-    const frontText = reverseMode ? card.back : card.front;
-    const backText  = reverseMode ? card.front : card.back;
+  const card = deck[currentIndex];
+  const frontText = reverseMode ? card.back : card.front;
+  const backText  = reverseMode ? card.front : card.back;
+  showCardFront(card, frontText, backText, currentIndex);
 
-    // 表面（用語）
-    const frontU = makeUtterance(frontText);
-    // onstart はフォールバック（発火すれば早めに表示）
-    frontU.onstart = () => {
-      if (!ttsPlaying) return;
-      showCardFront(card, frontText, backText, idx);
-    };
-    // onend でカードをめくる（iOS で信頼性が高い）
-    frontU.onend = () => {
-      if (!ttsPlaying) return;
-      flipped = true;
-      $('card').classList.add('flipped');
-    };
+  const u = makeUtterance(frontText);
+  u.onend = () => {
+    if (!ttsPlaying) return;
+    waitingForAnswer = true;
+    const hint = voiceMode
+      ? '「答え」と言うか タップして答えを表示'
+      : 'タップして答えを表示';
+    setHint(hint);
+  };
+  speechSynthesis.speak(u);
+}
 
-    // 無音ポーズ（用語→意味の切り替え）
-    const pauseU = makeUtterance('んんん', 0.5);
-    pauseU.volume = 0.001;
-    // onstart はフォールバック（frontU.onend が発火しなかった場合の保険）
-    pauseU.onstart = () => {
-      if (!ttsPlaying || flipped) return;
-      flipped = true;
-      $('card').classList.add('flipped');
-    };
+// 答え面を読み上げ → 終了後に次の問題へ
+function speakBack() {
+  const card = deck[currentIndex];
+  const backText = reverseMode ? card.front : card.back;
 
-    // 裏面（意味）※出典注釈は読み上げない
-    const backU = makeUtterance(stripCitation(backText));
+  flipped = true;
+  $('card').classList.add('flipped');
+  setHint('');
+  requestAnimationFrame(syncCardHeight);
 
-    // カード間の間
+  const backU = makeUtterance(stripCitation(backText));
+  backU.onend = () => {
+    if (!ttsPlaying) return;
     const gapU = makeUtterance('んんんんん', 0.5);
     gapU.volume = 0.001;
-    // onend で次のカードを表示（メイン同期機構）
-    const nextIdx = i + 1;
     gapU.onend = () => {
-      if (!ttsPlaying || nextIdx >= deck.length) return;
-      const nc = deck[nextIdx];
-      const nf = reverseMode ? nc.back : nc.front;
-      const nb = reverseMode ? nc.front : nc.back;
-      showCardFront(nc, nf, nb, nextIdx);
+      if (!ttsPlaying) return;
+      currentIndex++;
+      if (currentIndex >= deck.length) { stopTTS(); return; }
+      speakFront();
     };
-
-    speechSynthesis.speak(frontU);
-    speechSynthesis.speak(pauseU);
-    speechSynthesis.speak(backU);
     speechSynthesis.speak(gapU);
-  }
-
-  // 全カード終了マーカー
-  const endU = makeUtterance('以上です。');
-  endU.onend = () => stopTTS();
-  speechSynthesis.speak(endU);
+  };
+  speechSynthesis.speak(backU);
 }
 
 function toggleTTS() {
@@ -314,20 +304,127 @@ function toggleTTS() {
   if (currentIndex >= deck.length) currentIndex = 0;
 
   ttsPlaying = true;
+  waitingForAnswer = false;
   $('btn-tts').textContent = '■ 停止';
   $('btn-tts').classList.add('active');
 
-  queueTTS(); // ユーザー操作のハンドラから同期的に呼ぶ
+  speakFront();
 }
 
 function stopTTS() {
   ttsPlaying = false;
+  waitingForAnswer = false;
   speechSynthesis.cancel();
   const btn = $('btn-tts');
   if (btn) {
     btn.textContent = '▶ 音声';
     btn.classList.remove('active');
   }
+  setHint('クリック または Space/Enter でめくる');
+}
+
+// ── 音声コマンド ──────────────────────────────────────────────────────────────
+
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = 'ja-JP';
+  r.continuous = true;
+  r.interimResults = false;
+
+  r.onresult = e => {
+    const transcript = Array.from(e.results)
+      .slice(e.resultIndex)
+      .map(r => r[0].transcript)
+      .join('');
+
+    if (ttsPlaying) {
+      // インタラクティブTTSモードのコマンド
+      if (waitingForAnswer && /答え/.test(transcript)) {
+        waitingForAnswer = false;
+        // iOS制約: recognition callback から speak() できない場合がある
+        // → 画面だけめくって speakBack は iOS ではタップ促し
+        flipped = true;
+        $('card').classList.add('flipped');
+        setHint('タップして答えを読み上げ');
+        requestAnimationFrame(syncCardHeight);
+        // non-iOS はそのまま喋れる
+        speakBack();
+      } else if (/^次$|次へ/.test(transcript)) {
+        speechSynthesis.cancel();
+        waitingForAnswer = false;
+        currentIndex = Math.min(deck.length - 1, currentIndex + 1);
+        speakFront();
+      } else if (/^前$|前へ/.test(transcript)) {
+        speechSynthesis.cancel();
+        waitingForAnswer = false;
+        currentIndex = Math.max(0, currentIndex - 1);
+        speakFront();
+      }
+    } else {
+      // 通常モードのコマンド
+      if (/答え/.test(transcript)) {
+        flipCard();
+      } else if (/^正解$|正解/.test(transcript) && flipped) {
+        answer('correct');
+      } else if (/不正解/.test(transcript) && flipped) {
+        answer('wrong');
+      } else if (/^次$|次へ/.test(transcript)) {
+        nextCard();
+      } else if (/^前$|前へ/.test(transcript)) {
+        prevCard();
+      }
+    }
+  };
+
+  r.onerror = e => {
+    if (e.error === 'not-allowed') {
+      alert('マイクへのアクセスが拒否されました。ブラウザの設定で許可してください。');
+      stopVoice();
+    }
+  };
+
+  // 認識が途切れたら自動再起動
+  r.onend = () => {
+    if (voiceMode) {
+      try { r.start(); } catch (_) {}
+    }
+  };
+
+  return r;
+}
+
+function toggleVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    alert('お使いのブラウザは音声認識に対応していません。\nChrome または Edge をお試しください。');
+    return;
+  }
+
+  if (voiceMode) {
+    stopVoice();
+  } else {
+    startVoice();
+  }
+}
+
+function startVoice() {
+  if (!recognition) recognition = initRecognition();
+  if (!recognition) return;
+  voiceMode = true;
+  try { recognition.start(); } catch (_) {}
+  $('btn-voice').textContent = '🎤 ON';
+  $('btn-voice').classList.add('active');
+  if (waitingForAnswer) setHint('「答え」と言うか タップして答えを表示');
+}
+
+function stopVoice() {
+  voiceMode = false;
+  if (recognition) { try { recognition.stop(); } catch (_) {} }
+  $('btn-voice').textContent = '🎤';
+  $('btn-voice').classList.remove('active');
+  if (waitingForAnswer) setHint('タップして答えを表示');
 }
 
 // ── Event Listeners ───────────────────────────────────────────────────────────
@@ -342,6 +439,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('btn-restart').addEventListener('click', resetDeck);
   $('btn-mode').addEventListener('click', toggleMode);
   $('btn-tts').addEventListener('click', toggleTTS);
+  $('btn-voice').addEventListener('click', toggleVoice);
 
   document.addEventListener('keydown', e => {
     if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); flipCard(); }
@@ -356,6 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 's') nextCard();
     if (e.key === 'r') toggleMode();
     if (e.key === 'p') toggleTTS();
+    if (e.key === 'm') toggleVoice();
   });
 
   init();

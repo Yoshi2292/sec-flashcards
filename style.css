@@ -230,6 +230,15 @@ h1 span {
 .btn-tts:hover { color: var(--text); border-color: var(--text2); }
 .btn-tts.active { background: #e85d5d; border-color: #e85d5d; color: #fff; }
 
+.btn-voice { background: transparent; color: var(--text2); border: 1px solid var(--border); padding: 10px 14px; }
+.btn-voice:hover { color: var(--text); border-color: var(--text2); }
+.btn-voice.active { background: #22c55e; border-color: #22c55e; color: #fff; animation: pulse 1.4s infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+
 /* done screen */
 .done-screen {
   width: 100%;
