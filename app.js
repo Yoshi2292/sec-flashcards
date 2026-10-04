@@ -429,6 +429,13 @@ function stopVoice() {
 
 // ── Event Listeners ───────────────────────────────────────────────────────────
 
+// iOS はページ再読込後も前ページの読み上げキューが残ることがある
+if (window.speechSynthesis) speechSynthesis.cancel();
+window.addEventListener('pagehide', () => { if (window.speechSynthesis) speechSynthesis.cancel(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && ttsPlaying) stopTTS();
+});
+
 document.addEventListener('DOMContentLoaded', () => {
   $('card').addEventListener('click', flipCard);
   $('btn-correct').addEventListener('click', () => answer('correct'));
