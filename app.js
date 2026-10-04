@@ -6,6 +6,7 @@ let results = {}; // id -> 'correct'|'wrong'
 let reverseMode = false;
 let ttsPlaying = false;
 let waitingForAnswer = false; // インタラクティブTTSで答え待ち中
+let waitingForJudge = false;  // 答え読み上げ後、正解／不正解待ち中
 
 // ── 音声コマンド ──
 let voiceMode = false;
@@ -145,7 +146,10 @@ function flipCard() {
 }
 
 function answer(result) {
-  if (ttsPlaying) return;
+  if (ttsPlaying) {
+    if (flipped) judgeTTS(result);
+    return;
+  }
   const card = deck[currentIndex];
   results[card.id] = result;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
@@ -248,6 +252,8 @@ function showCardFront(card, frontText, backText, idx) {
 // 問題面を読み上げ → 終了後に一時停止して答え待ち
 function speakFront() {
   if (currentIndex >= deck.length) { stopTTS(); return; }
+  waitingForJudge = false;
+  setBackHint('');
 
   const card = deck[currentIndex];
   const frontText = reverseMode ? card.back : card.front;
@@ -276,20 +282,33 @@ function speakBack() {
   setHint('');
   requestAnimationFrame(syncCardHeight);
 
+  $('btn-correct').disabled = false;
+  $('btn-wrong').disabled = false;
+
   const backU = makeUtterance(stripCitation(backText));
   backU.onend = () => {
     if (!ttsPlaying) return;
-    const gapU = makeUtterance('んんんんん', 0.5);
-    gapU.volume = 0.001;
-    gapU.onend = () => {
-      if (!ttsPlaying) return;
-      currentIndex++;
-      if (currentIndex >= deck.length) { stopTTS(); return; }
-      speakFront();
-    };
-    speechSynthesis.speak(gapU);
+    waitingForJudge = true;
+    setBackHint(voiceMode ? '「正解」か「不正解」と言うか ボタンをタップ' : '正解／不正解をタップ');
   };
   speechSynthesis.speak(backU);
+}
+
+function judgeTTS(result) {
+  waitingForJudge = false;
+  setBackHint('');
+  speechSynthesis.cancel();
+  const card = deck[currentIndex];
+  results[card.id] = result;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(results));
+  currentIndex++;
+  updateProgress();
+  if (currentIndex >= deck.length) { stopTTS(); renderCard(); return; }
+  speakFront();
+}
+
+function setBackHint(text) {
+  $('card-back-hint').textContent = text;
 }
 
 function toggleTTS() {
@@ -314,6 +333,8 @@ function toggleTTS() {
 function stopTTS() {
   ttsPlaying = false;
   waitingForAnswer = false;
+  waitingForJudge = false;
+  setBackHint('');
   speechSynthesis.cancel();
   const btn = $('btn-tts');
   if (btn) {
@@ -351,9 +372,15 @@ function initRecognition() {
         requestAnimationFrame(syncCardHeight);
         // non-iOS はそのまま喋れる
         speakBack();
+      } else if (flipped && /不正解/.test(transcript)) {
+        judgeTTS('wrong');
+      } else if (flipped && /正解/.test(transcript)) {
+        judgeTTS('correct');
       } else if (/^次$|次へ/.test(transcript)) {
         speechSynthesis.cancel();
         waitingForAnswer = false;
+        waitingForJudge = false;
+        setBackHint('');
         currentIndex = Math.min(deck.length - 1, currentIndex + 1);
         speakFront();
       } else if (/^前$|前へ/.test(transcript)) {
@@ -366,10 +393,10 @@ function initRecognition() {
       // 通常モードのコマンド
       if (/答え/.test(transcript)) {
         flipCard();
-      } else if (/^正解$|正解/.test(transcript) && flipped) {
-        answer('correct');
       } else if (/不正解/.test(transcript) && flipped) {
         answer('wrong');
+      } else if (/正解/.test(transcript) && flipped) {
+        answer('correct');
       } else if (/^次$|次へ/.test(transcript)) {
         nextCard();
       } else if (/^前$|前へ/.test(transcript)) {
